@@ -1,0 +1,40 @@
+* tb_tcoil_ngspice.cir -- SPICE-equivalent of tb_tcoil.scs (verified in ngspice-42)
+* Same topology / same coupling polarity as tcoil_cc.va:
+*   L1: a1 -> c   (dot at a1)     L2: c -> b1 (dot at c)     K > 0 = series-aiding
+.param RLv=35 L1v=120p L2v=150p kv=0.29 Cbv=6f
+.param Qv=1e9
+.param r1v={6.283185307*75G*L1v/Qv} r2v={6.283185307*75G*L2v/Qv}
+
+Iac  0 c  DC 0 AC 1
+Rs   c 0  380
+Cdac c 0  200f
+RLd  a 0  {RLv}
+Cp   a 0  35f
+
+R1   a  a1 {r1v+1u}
+L1   a1 c  {L1v}
+L2   c  b1 {L2v}
+R2   b1 b  {r2v+1u}
+K12  L1 L2 {kv}
+Cbr  a  b  {Cbv}
+
+Cc   b d  1p
+Cin  d 0  35f
+Rb   d 0  3Meg
+
+.ac lin 480 0.25G 120G
+.control
+run
+let fx = frequency
+meas ac dc0  find vdb(d) at=0.25G
+meas ac g10  find vdb(d) at=10G
+meas ac g20  find vdb(d) at=20G
+meas ac g30  find vdb(d) at=30G
+meas ac g36  find vdb(d) at=36.25G
+meas ac g45  find vdb(d) at=45G
+meas ac g60  find vdb(d) at=60.25G
+meas ac g70  find vdb(d) at=70G
+meas ac g80  find vdb(d) at=80G
+meas ac g100 find vdb(d) at=100G
+.endc
+.end

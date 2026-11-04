@@ -1,0 +1,31 @@
+// ============================================================================
+// tb_tcoil.scs  -- Spectre AC testbench for the DAC-output T-coil
+// Observe:  dB20(VF("d"))  = transimpedance (dB re 1 ohm) to the driver input
+// NOTE: written for Spectre, NOT run in Spectre by the author (no licence).
+// ============================================================================
+simulator lang=spectre
+ahdl_include "tcoil_cc.va"
+
+parameters RLv=35 L1v=120p L2v=150p kv=0.29 Cbv=6f Qv=0
+
+// ---- idac model: AC current into node c, 380 ohm || 200 fF -----------------
+Iac   (0 c)  isource type=dc dc=0 mag=1
+Rs    (c 0)  resistor r=380
+Cdac  (c 0)  capacitor c=200f
+
+// ---- R_L to VDD (= AC ground) and its 35 fF parasitic ---------------------
+RLd   (a 0)  resistor r=RLv
+Cp    (a 0)  capacitor c=35f
+
+// ---- T-coil + bridging capacitor ------------------------------------------
+XT    (a c b) tcoil_cc L1=L1v L2=L2v k=kv Q=Qv f0=75G
+Cbr   (a b)  capacitor c=Cbv
+
+// ---- AC coupling, driver input, bias --------------------------------------
+Cc    (b d)  capacitor c=1p
+Cin   (d 0)  capacitor c=35f
+Rb    (d 0)  resistor r=3M          // 3 Mohm to VCM (= AC ground)
+
+// Use a LINEAR, FINE sweep: a sparse sweep hides narrow resonances.
+acsweep ac start=1G stop=120G step=0.25G
+save d

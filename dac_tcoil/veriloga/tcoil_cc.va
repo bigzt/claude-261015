@@ -1,0 +1,50 @@
+// ============================================================================
+// tcoil_cc.va  --  centre-tapped coupled inductor (T-coil) with series loss
+//
+//        a ---[ r1 + L1 ]--- c ---[ L2 + r2 ]--- b          k = M / sqrt(L1*L2)
+//
+//   a : R_L end (VDD side)      c : centre tap (DAC output node)
+//   b : driver end (to 1 pF AC-coupling cap)
+//
+// Current convention (this is what fixes the sign of k):
+//   I(b1) flows  a -> c   (through L1)
+//   I(b2) flows  c -> b   (through L2)
+//   Both currents run "a -> c -> b", so k > 0 is SERIES-AIDING
+//   (total series inductance = L1 + L2 + 2*M).  This is the usual T-coil.
+//   Equivalent SPICE:  L1 a c ... ; L2 c b ... ; K L1 L2 +k   (dots at a and c)
+//
+// Loss:  Q > 0  -> constant series R,  r = 2*pi*f0*L/Q   (Q specified at f0)
+//        Q = 0  -> lossless (r = Rdc only)
+// The bridging capacitor Cb (a--b) is NOT inside this module: put a separate
+// capacitor between a and b in the schematic so you can see/tune it.
+// ============================================================================
+`include "constants.vams"
+`include "disciplines.vams"
+
+module tcoil_cc (a, c, b);
+    inout a, c, b;
+    electrical a, c, b;
+
+    parameter real L1  = 120p  from (0:inf);   // H, R_L-side half
+    parameter real L2  = 150p  from (0:inf);   // H, driver-side half
+    parameter real k   = 0.29  from (-1:1);    // coupling coefficient (+ = aiding)
+    parameter real Q   = 0     from [0:inf);   // inductor Q at f0 (0 = lossless)
+    parameter real f0  = 75G   from (0:inf);   // frequency where Q is specified
+    parameter real Rdc = 0     from [0:inf);   // extra series R per half (DC resistance)
+
+    real M, r1, r2;
+
+    branch (a, c) b1;
+    branch (c, b) b2;
+
+    analog begin
+        @(initial_step) begin
+            M  = k * sqrt(L1 * L2);
+            r1 = Rdc + ((Q > 0) ? 2.0 * `M_PI * f0 * L1 / Q : 0.0);
+            r2 = Rdc + ((Q > 0) ? 2.0 * `M_PI * f0 * L2 / Q : 0.0);
+        end
+
+        V(b1) <+ r1 * I(b1) + L1 * ddt(I(b1)) + M * ddt(I(b2));
+        V(b2) <+ r2 * I(b2) + L2 * ddt(I(b2)) + M * ddt(I(b1));
+    end
+endmodule
