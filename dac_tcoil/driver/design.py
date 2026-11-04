@@ -5,6 +5,7 @@ from multiprocessing import Pool
 from scipy.optimize import differential_evolution
 import chain
 
+POL = 'n'
 F = np.concatenate([[0.1e9], np.arange(2e9, 122e9, 2e9)])
 KEYS = ['n1','j1','Lg','j2','I3','j3','Rs','Cs','La','Lb','ko','L1d','L2d','kd','Ib','Lin']
 B = [(40,600),(20,70),(0,300e-12),(15,70),(7e-3,16e-3),(15,70),(0,1e-6),(0,1e-21),
@@ -14,7 +15,7 @@ def to_p(x, out):
     v = dict(zip(KEYS, x))
     I2m = v['I3'] + v['Ib']; n2 = I2m*1e6/v['j2']; n3 = v['I3']*1e6/v['j3']
     p = dict(n1=v['n1'], j1=v['j1'], Lg=v['Lg'], n2=n2, I2=v['I3'], r3=n3/n2, Rs=v['Rs'], Cs=v['Cs'],
-             La=v['La'], Lb=v['Lb'], ko=v['ko'], Ib=v['Ib'], Lin=v['Lin'], out=out)
+             La=v['La'], Lb=v['Lb'], ko=v['ko'], Ib=v['Ib'], Lin=v['Lin'], out=out, pol=POL)
     dac = dict(chain.DAC); dac.update(L1=v['L1d'], L2=v['L2d'], k=v['kd'])
     return p, dac
 

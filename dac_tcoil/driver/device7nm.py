@@ -28,11 +28,16 @@ def vgs(j_uA):   return np.interp(np.log(j_uA), _lj, _vgs)
 def id_per_fin(vgs_v):   # inverse of vgs(), uA/fin (large-signal I-V, saturation)
     return np.exp(np.interp(vgs_v, _vgs, _lj))
 
-def mos(nfin, j_uA):
+PGM = 0.85          # pFET gm per fin relative to nFET (assumption)
+VGS_P_EXTRA = 0.02  # pFET |Vgs| slightly higher at same density (assumption)
+def cwell(nfin):    # n-well-to-psub cap of a PMOS whose well is tied to a signal node (estimate)
+    return (3.0 + 0.01*nfin)*1e-15
+
+def mos(nfin, j_uA, kind='n'):
     """small-signal params for nfin fins biased at j_uA uA/fin"""
     I = nfin * j_uA * 1e-6
-    gm = I * _interp(j_uA, GM_ID)
-    return dict(I=I, gm=gm, gds=gm/_interp(j_uA, A_INT), vgs=float(vgs(j_uA)),
+    gm = I * _interp(j_uA, GM_ID) * (PGM if kind == 'p' else 1.0)
+    return dict(I=I, gm=gm, gds=gm/_interp(j_uA, A_INT), vgs=float(vgs(j_uA)) + (VGS_P_EXTRA if kind == 'p' else 0.0),
                 vdsat=float(_interp(j_uA, VDSAT)),
                 cgs=nfin*CGS*1e-15, cgd=nfin*CGD*1e-15, cdb=nfin*CDB*1e-15, csb=nfin*CSB*1e-15,
                 ft=gm/(2*np.pi*nfin*(CGS+CGD)*1e-15))

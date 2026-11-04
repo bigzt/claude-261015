@@ -8,7 +8,7 @@ Signal path (per side):
   o -> output network (45 ohm to VDD, T-coil / shunt L) -> pad (ESD 100 fF, external 50 ohm)
 """
 import numpy as np
-from device7nm import mos
+from device7nm import mos, cwell
 
 W0 = 2*np.pi*75e9          # frequency at which inductor Q is specified
 RDC_FRAC = 0.15            # coil loss model: R(f) = R75*(RDC_FRAC + (1-RDC_FRAC)*sqrt(f/75G))
@@ -76,29 +76,39 @@ def build(p, Q=9.0, dac=DAC, fix=FIX, with_dac=True, drive='dac'):
         else:
             s.C('b', 'd', f_['Cc'])
     s.R('d', '0', f_['Rb']); s.C('d', '0', f_['Croute_in'])
-    # --- M1 source follower, drain cascode Mc (gate AC-ground) -------------
-    m1 = mos(p['n1'], p['j1']); mc = mos(p['n1'], p['j1'])
-    s.G('Y', 's1', 'd', m1['gm']); s.R('Y', 's1', 1/m1['gds'])
-    s.C('d', 's1', m1['cgs']); s.C('d', 'Y', m1['cgd']); s.C('Y', '0', m1['cdb']); s.C('s1', '0', m1['csb'])
-    s.G('0', 'Y', '0', mc['gm']); s.R('0', 'Y', 1/mc['gds']); s.C('Y', '0', mc['cgs'] + mc['csb'])
-    mt1 = mos(p['n1']*p['j1']/60., 60.)                    # SF tail at 60 uA/fin
-    s.R('s1', '0', 1/mt1['gds']); s.C('s1', '0', mt1['cdb'] + 3e-15)
+    K = p.get('pol', 'n')
+    if K == 'n':
+        # --- M1 NMOS source follower, drain cascode Mc (gate AC-ground) ------
+        m1 = mos(p['n1'], p['j1']); mc = mos(p['n1'], p['j1'])
+        s.G('Y', 's1', 'd', m1['gm']); s.R('Y', 's1', 1/m1['gds'])
+        s.C('d', 's1', m1['cgs']); s.C('d', 'Y', m1['cgd']); s.C('Y', '0', m1['cdb']); s.C('s1', '0', m1['csb'])
+        s.G('0', 'Y', '0', mc['gm']); s.R('0', 'Y', 1/mc['gds']); s.C('Y', '0', mc['cgs'] + mc['csb'])
+        mt1 = mos(p['n1']*p['j1']/60., 60.)
+        s.R('s1', '0', 1/mt1['gds']); s.C('s1', '0', mt1['cdb'] + 3e-15)
+    else:
+        # --- M1 PMOS source follower, well tied to source; drain -> Rd 25 ohm || 2 pF bypass to GND
+        m1 = mos(p['n1'], p['j1'], 'p'); mc = m1
+        s.G('Y', 's1', 'd', m1['gm']); s.R('Y', 's1', 1/m1['gds'])
+        s.C('d', 's1', m1['cgs']); s.C('d', 'Y', m1['cgd']); s.C('Y', '0', m1['cdb']); s.C('s1', '0', cwell(p['n1']))
+        s.R('Y', '0', 25.0); s.C('Y', '0', 2e-12)
+        mt1 = mos(p['n1']*p['j1']/60., 60., 'p')            # cascoded PMOS current source from VDD
+        s.R('s1', '0', 1/mt1['gds']); s.C('s1', '0', mt1['cdb'] + 3e-15)
     # --- inter-stage series inductor --------------------------------------
     s.L('s1', 'g2', max(p['Lg'], 1e-15), Q if p['Lg'] > 1e-13 else 0)
     # --- M2 degenerated, M3 cascode -----------------------------------------
     Ib = p.get('Ib', 0.0)                                  # PMOS bleed current into x
     I2m = p['I2'] + Ib                                     # M2 current = M3 current + bleed
     j2 = I2m*1e6/p['n2']
-    m2 = mos(p['n2'], j2); n3 = p['n2']*p['r3']; m3 = mos(n3, p['I2']*1e6/n3)
+    m2 = mos(p['n2'], j2, K); n3 = p['n2']*p['r3']; m3 = mos(n3, p['I2']*1e6/n3, K)
     if Ib > 0:                                             # cascoded PMOS bleeder at 40 uA/fin
         mb = mos(Ib*1e6/40., 40.)
         s.R('x', '0', 5/mb['gds']); s.C('x', '0', mb['cdb'] + mb['cgd'] + 2e-15)
     s.G('x', 's2', 'g2', m2['gm']); s.R('x', 's2', 1/m2['gds'])
-    s.C('g2', 's2', m2['cgs']); s.C('g2', 'x', m2['cgd']); s.C('x', '0', m2['cdb']); s.C('s2', '0', m2['csb'])
-    mt2 = mos(I2m*1e6/60., 60.)
+    s.C('g2', 's2', m2['cgs']); s.C('g2', 'x', m2['cgd']); s.C('x', '0', m2['cdb']); s.C('s2', '0', m2['csb'] + (cwell(p['n2']) if K == 'p' else 0.0))
+    mt2 = mos(I2m*1e6/60., 60., K)
     s.R('s2', '0', 1/(1/max(p['Rs'], 1e-4) + mt2['gds']))   # Rs = half-circuit degeneration (0 = common source node, virtual ground); s.C('s2', '0', mt2['cdb'] + p['Cs'] + 1e-18)
     s.G('o', 'x', '0', m3['gm']); s.R('o', 'x', 1/m3['gds'])
-    s.C('x', '0', m3['cgs'] + m3['csb']); s.C('o', '0', m3['cgd'] + m3['cdb'] + 3e-15)
+    s.C('x', '0', m3['cgs'] + m3['csb'] + (cwell(n3) if K == 'p' else 0.0)); s.C('o', '0', m3['cgd'] + m3['cdb'] + 3e-15)
     # --- output network ------------------------------------------------------
     f_o = p['out']
     s.C('pad', '0', f_['Cesd']); s.R('pad', '0', f_['Rext'])
