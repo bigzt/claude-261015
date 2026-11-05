@@ -21,8 +21,12 @@ def build(p, Q=9.0, fix=FIX, with_dac=True, kind='p'):
     s.G('o', 'x', '0', m2['gm']); s.R('o', 'x', 1/m2['gds'])
     s.C('x', '0', m2['cgs'] + m2['csb'] + D.cwell(n2))   # n-well (pmos) or DNW p-well (nmos) tied to source X
     s.C('o', '0', m2['cgd'] + m2['cdb'] + 3e-15)
-    s.L('o', 't', max(p['Lp'], 1e-15), Q if p['Lp'] > 1e-13 else 0); s.R('t', '0', f['RT']); s.C('t', '0', f['CRT'])
-    s.K('o', 'esd', 'pad', p['L1'], p['L2'], p['k'], Q); s.C('esd', '0', f['Cesd']); s.C('o', 'pad', p['C0'] + 1e-18); s.C('pad', '0', f['Cpad'])
+    if p.get('padpos', 'end') == 'end':      # user topology: 45ohm+Lp at drain, ESD at centre, PAD at L2 end
+        s.L('o', 't', max(p['Lp'], 1e-15), Q if p['Lp'] > 1e-13 else 0); s.R('t', '0', f['RT']); s.C('t', '0', f['CRT'])
+        s.K('o', 'esd', 'pad', p['L1'], p['L2'], p['k'], Q); s.C('esd', '0', f['Cesd']); s.C('o', 'pad', p['C0'] + 1e-18); s.C('pad', '0', f['Cpad'])
+    else:                                    # classic: PAD+ESD at centre tap, 45 ohm at L2 end
+        s.K('o', 'pad', 't', p['L1'], p['L2'], p['k'], Q); s.C('pad', '0', f['Cesd'] + f['Cpad']); s.C('o', 't', p['C0'] + 1e-18)
+        s.R('t', '0', f['RT']); s.C('t', '0', f['CRT'])
     return s, dict(m1=m1, m2=m2, n2=n2)
 F = np.concatenate([[0.1e9], np.arange(2e9, 122e9, 2e9)])
 def metrics(p, Q=9.0, fix=FIX, kind='p'):
